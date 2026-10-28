@@ -1,0 +1,131 @@
+# 团队版账本样例（公司 AI 用）。字段说明见 07-公司AI实施手册.md 第 5 节。
+# 存储方式不限：这个 YAML 文件、一张数据库表、或者任务系统里的字段都行。
+# 关键是：只有 TPM 一个写入者；每次改完用 templates/ledger_check.py 校验（数据库的话按同样规则写校验）。
+# ⚠️ 下面的人名、频道、账号 ID、批准记录全部是虚构的示例。不要照抄任何值，尤其不要照抄 phase_approval_ref：
+#    真实部署时 phase 必须先写 not_enabled，等流程负责人真的批准了，再按真实消息填写。
+
+mode: team
+phase: shadow                  # 当前阶段：not_enabled / shadow（影子）/ confirm（人工确认）/ auto（有限自动）
+phase_approval_ref:            # 谁、在哪、何时批准了当前阶段。缺任何一项，就按 not_enabled 处理
+  by: person:Lin
+  account_id: "100000000000000001"
+  message: "<原始消息链接（示例）>"
+  phase: shadow
+  scope: "只跟踪 #design-review 的设计评审帖；每个工作日 17:00 在 #design-review 发摘要"
+  at: 2026-10-27T16:00:00-04:00
+next_decision_id: 5            # 下一个可用的决定编号。分配后立刻 +1，编号永不复用
+resources: [website, crm, events, discord-bot, design-assets]   # 共享资源：同一资源同一时间只有一个负责人动手
+timezone: America/New_York     # 所有「工作日」「下班时间」「已等多久」都按这个时区算
+workdays: [Mon, Tue, Wed, Thu, Fri]
+holidays: [2026-11-26]         # 不算工作日的日期
+do_not_remind: []              # 说过「别再提醒我」的人（person:<名>），按账号核对后加入，重启后仍然有效
+people:                        # 身份对照表：核对回复者身份只看平台账号 ID，不看显示名（显示名可以随便改）
+  person:Lin: {discord: "100000000000000001"}
+  person:Mei: {discord: "100000000000000002"}
+  person:Kai: {discord: "100000000000000003"}
+process_owner: person:Lin      # 这套 TPM 流程的人类负责人
+approvers:                     # 审批类别 → 能批的人（见 decision-rights.md）。第一期每个决定只指定其中一人
+  publish: [person:Lin]
+  spend: [person:Lin]
+  design_review: [person:Lin, person:Mei]
+
+items:
+  # 一个正在等审批的决定
+  - id: L-20261028-01
+    revision: 1
+    title: 秋季活动落地页的设计评审
+    kind: decision
+    decision_id: D1
+    approval_type: design_review
+    approver: person:Mei
+    options:                     # 发出去的那一版选项，原样保存。选项、范围、审批人、有效期任何一项要变，就作废 D1、另开新编号
+      A: 通过
+      B: 需要修改（请在评审帖里写意见）
+      C: 先放一放
+    decision_expires_at: 2026-11-04T17:00:00-05:00   # 11 月 1 日之后纽约是 UTC-5
+    owner: person:Kai
+    resource_id: website
+    status: awaiting_decision
+    blocked_reason: awaiting_decision
+    waiting_since: 2026-10-27T10:00:00-04:00
+    reminder_stage: none
+    next_action: Mei 私信 TPM 回复「D1 A/B/C」（第一期只在私信里收决定）
+    done_when: Mei 对 D1 给出任一有效选项（决定被回答就算完成；后续修改或上线另记事项）
+    closes_by: approver
+    source: "#design-review 评审帖 <链接>"
+
+  # 一个已经做出的决定（D3）——决定本身已关闭
+  - id: L-20261028-04
+    revision: 1
+    title: 是否追加 200 美元广告预算
+    kind: decision
+    decision_id: D3
+    approval_type: spend
+    approver: person:Lin
+    options:
+      A: 追加
+      B: 不追加
+    decision_expires_at: 2026-10-30T17:00:00-04:00
+    owner: person:Kai
+    resource_id: none
+    status: done
+    next_action: 无
+    done_when: Lin 对 D3 给出任一有效选项
+    closes_by: approver
+    evidence: "Lin 私信 TPM「D3 A」，<消息链接>，2026-10-28T11:02-04:00"
+
+  # D3 选了 A，所以另记一条执行事项，由 Kai 负责
+  - id: L-20261028-05
+    revision: 1
+    title: 按 D3 追加广告预算并投放
+    kind: commitment
+    owner: person:Kai
+    resource_id: none
+    status: done
+    authorization_ref:           # 执行依据：指向审批人本人的原话。TPM 的通知不构成授权，Kai 要自己核对这条原话
+      decision_id: D3
+      choice: A
+      by: person:Lin
+      account_id: "100000000000000001"
+      message: "<Lin 原始消息链接>"
+      at: 2026-10-28T11:02:00-04:00
+    approval_expires_at: 2026-11-04T11:02:00-05:00
+    worker_ack_at: 2026-10-28T11:15:00-04:00
+    next_action: 无
+    done_when: Kai 在 #marketing 贴出投放截图
+    closes_by: owner
+    evidence: "Kai 11:30 在 #marketing 贴了投放截图 <链接>"
+
+  # 一件有人答应要做的事
+  - id: L-20261028-02
+    revision: 2                  # 截止时间改过一次（不涉及审批），所以 revision 是 2
+    title: 给报名者发提醒邮件
+    kind: commitment
+    owner: person:Kai
+    resource_id: crm
+    status: in_progress
+    next_action: Kai 在 CRM 里排好发送时间
+    done_when: CRM 里能看到这封邮件的发送记录
+    closes_by: tpm
+    next_check: 2026-10-29T09:00:00-04:00
+    worker_ack_at: 2026-10-28T09:12:00-04:00
+    source: "任务系统 #123"
+
+  # 健康检查发现的异常
+  - id: L-20261028-03
+    revision: 1
+    title: 活动报名接口报错
+    kind: anomaly
+    anomaly_key: "check:events-api"
+    first_seen_at: 2026-10-28T10:14:00-04:00
+    owner: tpm
+    resource_id: events
+    status: open
+    next_action: 在摘要里列出，并附错误样例；只报告，不自己修
+    done_when: 本轮健康检查读取完整且结果正常
+    closes_by: tpm
+    source: "定时健康检查"
+
+someday:
+  - title: 试一下 AI 自动生成活动回顾
+    source: "#ideas 帖子"
